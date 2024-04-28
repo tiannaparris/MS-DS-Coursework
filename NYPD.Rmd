@@ -1,0 +1,186 @@
+---
+title: "NYPD"
+author: "T. Parris"
+date: "2024-04-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+This R Markdown document describes and imports the NYPD project dataset in a reproducible manner.
+
+## Description
+
+List of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year.
+
+This is a breakdown of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. This data is manually extracted every quarter and reviewed by the Office of Management Analysis and Planning before being posted on the NYPD website. Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included. This data can be used by the public to explore the nature of shooting/criminal activity.
+
+## Dataset Information
+
+- Dataset Name: NYDP Shooting Incident Data (Historic)
+- Source: "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+- Format: CSV
+
+## Load necessary Libraries
+
+```{r}
+library(lubridate)
+library(tidyverse)
+library(dplyr)
+```
+
+
+## Import Dataset
+
+```{r}
+# URL of the dataset
+url <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+
+# Import the dataset
+df_incident <- read_csv(url) 
+
+# Display the first few rows of the dataset
+head(df_incident)
+```
+
+## Tidy and Transform Data
+
+```{r}
+# Clean up unnecessary columns
+df_clean <- df_incident %>% select(INCIDENT_KEY, 
+                   OCCUR_DATE,
+                   OCCUR_TIME,
+                   BORO, 
+                   STATISTICAL_MURDER_FLAG,
+                   LOC_OF_OCCUR_DESC,
+                   PERP_AGE_GROUP,
+                   PERP_SEX,
+                   PERP_RACE,
+                   VIC_AGE_GROUP,
+                   VIC_SEX,
+                   VIC_RACE,
+                   Latitude,
+                   Longitude)
+
+# Convert date variable to Date type
+df_clean$OCCUR_DATE <- as.Date(df_clean$OCCUR_DATE, format = "%m/%d/%Y")
+
+# Handle missing values
+
+# Replace values not within specified age ranges with "Unknown"
+df_clean <- df_clean %>%
+  mutate(PERP_AGE_GROUP = case_when(
+    is.na(PERP_AGE_GROUP) ~ "Unknown",  # Handle NA values
+    PERP_AGE_GROUP %in% c("<18", "18-24", "25-44", "45-64", "65+") ~ PERP_AGE_GROUP,  # Keep values within specified age ranges
+    TRUE ~ "Unknown"  # Replace other values with "Unknown"
+  ))
+
+df_clean <- df_clean %>%
+  mutate(VIC_AGE_GROUP = case_when(
+    is.na(VIC_AGE_GROUP) ~ "Unknown",  # Handle NA values
+    VIC_AGE_GROUP %in% c("<18", "18-24", "25-44", "45-64", "65+") ~ VIC_AGE_GROUP,  # Keep values within specified age ranges
+    TRUE ~ "Unknown"  # Replace other values with "Unknown"
+  ))
+
+# Replace missing, specific values, and "UNKNOWN" in PERP_SEX and PERP_RACE
+df_clean$PERP_SEX <- ifelse(is.na(df_clean$PERP_SEX) | df_clean$PERP_SEX == "(null)" | df_clean$PERP_SEX == "UNKNOWN", "Unknown", df_clean$PERP_SEX)
+df_clean$PERP_RACE <- ifelse(is.na(df_clean$PERP_RACE) | df_clean$PERP_RACE == "(null)" | df_clean$PERP_RACE == "(Other)" | df_clean$PERP_RACE == "UNKNOWN", "Unknown", df_clean$PERP_RACE)
+
+# Replace missing, specific values, and "UNKNOWN" in VIC_SEX and VIC_RACE
+df_clean$VIC_SEX <- ifelse(is.na(df_clean$VIC_SEX) | df_clean$VIC_SEX == "(null)" | df_clean$VIC_SEX == "UNKNOWN", "Unknown", df_clean$VIC_SEX)
+df_clean$VIC_RACE <- ifelse(is.na(df_clean$VIC_RACE) | df_clean$VIC_RACE == "(null)" | df_clean$VIC_RACE == "(Other)" | df_clean$VIC_RACE == "UNKNOWN", "Unknown", df_clean$VIC_RACE)
+
+# Convert relevant variables to factor type
+df_clean <- df_clean %>%
+  mutate_at(vars(STATISTICAL_MURDER_FLAG, PERP_AGE_GROUP, PERP_SEX, PERP_RACE, BORO,
+                 VIC_AGE_GROUP, VIC_SEX, VIC_RACE), as.factor)
+
+# Display summary statistics
+summary(df_clean)
+```
+
+## Data Visualizations and Analysis
+
+### Data Visualization 1
+
+**- Which Borough in New York City had the most Incidents?**
+
+```{r}
+g <- ggplot(df_clean, aes(x = BORO, fill = STATISTICAL_MURDER_FLAG)) +
+  geom_bar() +
+  labs(title = "Shooting Incidents by Boroughs of New York City",
+       x = "New York City Boroughs",
+       y = "Number of Incidents",
+       fill = "Statistical Murder Flag") +
+  theme_minimal()
+
+g
+```
+
+Brooklyn leads in both the total number of incidents and murder cases, followed by the Bronx and Queens in succession, mirroring the ranking of incidents.
+
+
+### Data Visualization 2
+
+**- Which year had the most Incidents in New York City?**
+
+```{r}
+# Extract year from OCCUR_DATE
+df_clean <- df_clean %>%
+  mutate(OCCUR_YEAR = format(as.Date(OCCUR_DATE), "%Y"))
+
+# Create the plot
+g <- ggplot(df_clean, aes(x = OCCUR_YEAR)) +
+  geom_bar() +
+  labs(title = "Shooting Incidents by Year in New York City",
+       x = "Year",
+       y = "Number of Incidents") +
+  theme_minimal()
+g
+```
+
+The year with the most incidents was 2006, followed by a gradual decline in the number of incidents until 2020, where there was a notable spike. This increase in incidents during 2020 could be attributed to various factors, including the impact of the COVID-19 pandemic and the heightened socio-political atmosphere surrounding the US elections.
+
+### Data Modelling
+
+**- Predict the Number of Incidents for 2024.**
+
+
+```{r}
+# Convert OCCUR_YEAR to numeric
+df_clean <- df_clean %>%
+  mutate(OCCUR_YEAR = as.numeric(OCCUR_YEAR))
+
+# Assuming df_clean is your main dataset
+pred_data <- df_clean %>%
+  filter(OCCUR_YEAR >= 2020) %>%
+  group_by(OCCUR_YEAR) %>%
+  summarise(total = n())
+
+# Fit linear regression model
+model <- lm(total ~ OCCUR_YEAR, data = pred_data)
+
+# Create new data for prediction
+newdata <- tibble(OCCUR_YEAR = c(2024))
+
+# Predict the number of shooting incidents for 2024
+predicted_2024 <- predict(model, newdata = newdata)
+predicted_2024
+
+```
+
+The number of incidents predicted for 2024 is 1134.
+
+## Identify Bias
+
+This report used data collected from the City of New York's open access database, but it's important to acknowledge any inherent biases within its collection process conducted by the New York Police Department. These could result from variations in reporting practices across areas leading to underreporting or overreporting incidents; external factors like socioeconomic disparities and regional demographics may skew data collection results as well. Therefore, when drawing any conclusions based on these numbers it would be prudent to carefully consider any potential biases when drawing any conclusions derived from them.
+
+Furthermore, it's notable that there was a spike in incidents during 2020, coinciding with significant events such as a presidential election and the onset of the COVID-19 pandemic. These external factors may have influenced behavioral patterns and reporting practices, contributing to the observed increase in incidents during that period. Hence, it's crucial to contextualize the data within the broader socio-political and environmental landscape to derive meaningful insights.
+
+## Conclusion
+
+The Borough with the most incidents in New York City is Brooklyn.
